@@ -1,31 +1,180 @@
 name: openchrom
 base: core18
 
-version: '1.4.0.202112230244'
+version: '1.4.0.202201211106'
 summary: Visualization and Analysis of mass spectrometric and chromatographic data.
 description:
   OpenChrom® is an Open Source tool for the analysis and visualization of
   mass spectrometric and chromatographic data developed by Lablicate GmbH.
 
 grade: stable
-confinement: classic
+confinement: devmode
 
 architectures:
   - build-on: amd64
 
+plugs:
+  openchrom-dot-dir:
+    interface: personal-files
+    read:
+      - $HOME/.openchrom
+      - $HOME/.wine
+    write:
+      - $HOME/.openchrom
+      - $HOME/.wine
+  gnome-3-28-1804:
+    interface: content
+    target: $SNAP/gnome-platform
+    default-provider: gnome-3-28-1804
+  gtk-2-engines:
+    interface: content
+    target: $SNAP/lib/gtk-2.0
+    default-provider: gtk2-common-themes
+  gtk-2-themes:
+    interface: content
+    target: $SNAP/data-dir/themes
+    default-provider: gtk2-common-themes
+  icon-themes:
+    interface: content
+    target: $SNAP/data-dir/icons
+    default-provider: gtk2-common-themes
+  sound-themes:
+    interface: content
+    target: $SNAP/data-dir/sounds
+    default-provider: gtk2-common-themes
+  wine-runtime:
+    interface: content
+    target: $SNAP/wine-runtime
+    default-provider: wine-platform-runtime
+  wine-5-stable:
+    interface: content
+    target: $SNAP/wine-platform
+    default-provider: wine-platform-5-stable
+
 apps:
   openchrom:
+    command-chain:
+      - snap/command-chain/desktop-launch
     command: bin/openchrom-wrapper
+    plugs:
+      - audio-playback
+      - browser-support
+      - cups-control
+      - desktop
+      - desktop-legacy
+      - gsettings
+      - hardware-observe
+      - home
+      - network
+      - openchrom-dot-dir
+      - opengl
+      - process-control
+      - removable-media
+      - unity7
+      - wayland
+      - x11
+  wine:
+    command: bin/sommelier
+    plugs:
+      - home
 
 parts:
   openchrom:
     plugin: dump
     source: https://products.lablicate.com/openchrom/1.4.x/openchrom-lablicate_linux.x86_64_1.4.x.tar.gz
-    source-checksum: "sha256/e5e7cb90763f0f45f0545fb9b0ec472e4989214a7ebead2f136d759f029eac37"
-    build-attributes:
-      - no-patchelf
+    source-type: tar
+    override-build: |
+      snapcraftctl build
+      # Add these missing libraries to DT_NEEDED
+      patchelf \
+        --add-needed libusb-1.0.so.0 \
+        --add-needed libGL.so.1 \
+        --add-needed libX11.so.6 \
+        --add-needed libXext.so.6 \
+        --add-needed libXi.so.6 \
+        --add-needed libXrender.so.1 \
+        --add-needed libXtst.so.6 \
+        --add-needed libXxf86vm.so.1 \
+        --add-needed libasound.so.2 \
+        --add-needed libatk-1.0.so.0 \
+        --add-needed libcairo.so.2 \
+        --add-needed libfontconfig.so.1 \
+        --add-needed libgdk-x11-2.0.so.0 \
+        --add-needed libgdk_pixbuf-2.0.so.0 \
+        --add-needed libgtk-x11-2.0.so.0 \
+        --add-needed libpango-1.0.so.0 \
+        --add-needed libpangocairo-1.0.so.0 \
+        --add-needed libpangoft2-1.0.so.0 \
+        openchrom
+    build-packages:
+      - patchelf
+    stage-packages:
+      - libusb-1.0-0
+      - libgl1
+      - libx11-6
+      - libxext6
+      - libxi6
+      - libxrender1
+      - libxtst6
+      - libxxf86vm1
+      - libasound2
+      - libatk1.0-0
+      - libcairo2
+      - libfontconfig1
+      - libgtk2.0-0
+      - libgdk-pixbuf2.0-0
+      - libpango-1.0-0
+      - libpangocairo-1.0-0
+      - libpangoft2-1.0-0
+    after:
+      - desktop-gtk2
   wrappers:
     plugin: dump
     source: snap/local/wrappers
+    source-type: local
     organize:
       openchrom: bin/openchrom-wrapper
+
+  desktop-gtk2:
+    build-packages:
+      - build-essential
+      - libgtk2.0-dev
+    make-parameters:
+      - FLAVOR=gtk2
+    plugin: make
+    source: https://github.com/ubuntu/snapcraft-desktop-helpers.git
+    source-subdir: gtk
+    stage-packages:
+      - libxkbcommon0
+      - ttf-ubuntu-font-family
+      - dmz-cursor-theme
+      - light-themes
+      - adwaita-icon-theme
+      - gnome-themes-standard
+      - shared-mime-info
+      - libgtk2.0-0
+      - libgdk-pixbuf2.0-0
+      - libglib2.0-bin
+      - libgtk2.0-bin
+      - unity-gtk2-module
+      - locales-all
+      - libappindicator1
+      - xdg-user-dirs
+      - ibus-gtk
+      - libibus-1.0-5
+    organize:
+      usr/lib/$SNAPCRAFT_ARCH_TRIPLET/gtk-2.0: usr/lib/gtk-2.0
+      usr/lib/$SNAPCRAFT_ARCH_TRIPLET/gtk-3.0: usr/lib/gtk-3.0
+
+  sommelier:
+    plugin: make
+    source: https://github.com/snapcrafters/sommelier-core.git
+
+  libudev0:
+    plugin: make
+    artifacts:
+      - libudev.so.0.0.9999 # TODO
+    source: https://github.com/archlinux/libudev0-shim/archive/refs/tags/v1.tar.gz
+    source-type: tar
+    build-packages:
+      - libudev-dev
